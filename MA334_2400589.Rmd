@@ -1,0 +1,709 @@
+---
+title: "MA334 Individual Assignment"
+author: "Sakthivel Vinayagam (2400589)"
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,message = FALSE,warning = FALSE)
+```
+
+```{r}
+# Set the CRAN mirror for downloading packages
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+```
+
+```{r, include=FALSE}
+```
+
+```{r, include=FALSE}
+# To ensure a clean work area, clearing the R environment and console.
+while (dev.cur() > 1) dev.off()
+rm(list = ls())
+cat("\014")
+```
+
+```{r}
+# importing required packages
+# The 'tidyverse' package is used for data manipulation, visualization, and cleaning.
+# The 'DescTools' package provides descriptive statistics and additional tools for data analysis.
+# The 'ggplot2' package is used for creating plots and visualizing data.
+# The 'reshape2'package is used for changing the format of data (wide to long and vice-versa).
+#install.packages("tidyverse")
+#install.packages("DescTools")
+#install.packages("ggplot2")
+#install.packages("reshape2")
+#install.packages("dplyr")
+#install.packages("kableExtra")
+library(tidyverse)
+library(DescTools)
+library(ggplot2)
+library(reshape2)
+library(dplyr)
+library(tinytex)
+library(kableExtra)
+```
+
+\Large \underline{\textbf{Univariate analysis and basic Statistics:}}
+
+```{r chunk_name, echo=FALSE}
+# change working directory to access the csv file and assigned to a variable.
+setwd("~/Library/CloudStorage/OneDrive-UniversityofEssex/MA334_AU_Individual_Assignment")
+BD11 <-  read.csv("proportional_species_richness_NAs_removed.csv")
+
+# Defining column names for the 6 taxonomic groups
+BD6_taxonomic_names <- c("Ladybirds", "Vascular_plants", "Carabids", "Grasshoppers_._Crickets", "Bird", "Macromoths")
+
+# Calculating mean value for each rows in BD6  taxonomic groups.
+BD6_mean <- rowMeans(BD11[,BD6_taxonomic_names])
+
+# Extracting the 6 specified taxonomic groups and relevant columns from BD11 and discarding the rest.
+BD6 <- BD11 %>% 
+  select("Location", all_of(BD6_taxonomic_names), "Easting", "Northing", "dominantLandClass","ecologicalStatus", "period") %>% 
+  mutate(eco_status_6 = BD6_mean)  # Adding the row Means as a new column
+
+# Converting variables into factor
+# BD6$Location <- as.factor((BD6$Location))
+BD6$dominantLandClass <- as.factor(BD6$dominantLandClass)
+BD6$period <- as.factor(BD6$period) 
+
+# Filter rows where 'dominantLandClass' contains the pattern 's' to select data for Scotland.
+BD6<- BD6 %>%
+  filter(grepl("s",dominantLandClass)) 
+```
+
+```{r}
+# Creating a Function to find 25% of Winsorized mean.
+winsorized_mean <- function(var){
+  x <- sort(var)
+  winsorized_num <- floor(0.25 * length(x)) 
+  l <- length(x)
+  for (i in 1:winsorized_num){
+    x[i] <- x[winsorized_num + 1]}
+  for (i in seq(l - winsorized_num + 1, l, 1)){
+    x[i] <- x[l - winsorized_num]}
+  return(mean(x))
+}
+
+# Generate summary statistics and calculate the 25% Winsorized mean for BD6 taxonomic groups.
+
+summary_table <- data.frame()
+for(i in c(2:7)){
+  summary_table <- rbind(summary_table,
+                         c(names(BD6)[i],
+                           summary(BD6[,i]),
+                           winsorized_mean(BD6[,i])))
+}
+colnames(summary_table) <- c("Taxonomic_group", "Min", "1st Q", "Median", "Mean", "3rd Q", "Max", "T25_win_mn")
+
+summary_table$Min <- round(as.numeric(summary_table$Min), digits = 4)
+summary_table$`1st Q` <- round(as.numeric(summary_table$`1st Q`), digits = 4)
+summary_table$Median <- round(as.numeric(summary_table$Median), digits = 4)
+summary_table$Mean <- round(as.numeric(summary_table$Mean), digits = 4)
+summary_table$`3rd Q` <- round(as.numeric(summary_table$`3rd Q`), digits = 4)
+summary_table$Max <- round(as.numeric(summary_table$Max), digits = 4)
+summary_table$T25_win_mn <- round(as.numeric(summary_table$T25_win_mn), digits = 4)
+
+summary_table %>%
+  kable("latex", 
+        booktabs = TRUE) %>%
+  kable_styling(latex_options = c("striped", "hold_position", "scale_down"), 
+                font_size = 10, 
+                position = "center") %>%
+  column_spec(1, bold = TRUE, color = "black") %>%   # Highlight taxonomic group column
+  column_spec(2:8, width = "2cm") %>%              # Set column widths
+  add_header_above(c(" " = 1, "Summary Statistics" = 6, " " = 1)) 
+```
+
+\small The dataset gives an overview of biodiversity metrics for six taxonomic groups in Scotland: Ladybirds, Vascular Plants, Carabids, Grasshoppers & Crickets, Birds, and Macromoths. Vascular Plants are found to have the greatest stability; the median value is 0.7975, and the 25% Winsorized mean is 0.7901. In contrast, with a maximum of 1.84, Ladybirds display the most variability. An interesting point for Birds is to note their fairly high 3rd Quartile (0.9207) and fairly steady mean (0.8287), indicating its ecological relevance. Carabids show the supposed lowest minimum value (0.0115), which indicates little biodiversity in some areas. Grasshoppers & Crickets, while moderate in variability, show that macromoths have a rather wide range: mean of 0.7932 and maximum of 1.2604. This analysis stresses the biodiversity and variation of the taxonomic groups in Scotland.
+
+
+\large \underline{\textbf{Correlation:}}
+
+```{r fig.align='center', fig.show="hold", out.width="65%"}
+# ============================= Correlation matrix ============================================ #
+
+# Calculate the correlation matrix for BD6 taxonomic groups.
+cor_values <- BD6 %>% select(c(2:7))
+correlation_matrix <- round(x = cor(cor_values, use = 'pairwise.complete.obs'), digits = 2)
+
+# Melt the correlation matrix for ggplot.
+correlation_matrix_melted <- melt(correlation_matrix)
+
+# Creating the heatmap for correlation matrix using ggplot.
+ggplot(correlation_matrix_melted, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "pink", high = "green", mid = "white", midpoint = 0.5, limit = c(0, 1), name = "Correlation") +
+  geom_text(aes(label = round(value, 2)), color = "black", size = 3) +  
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, size = 8),
+        axis.text.y = element_text(size = 6),
+        axis.title = element_blank(),
+        plot.title = element_text(size = 18, face = "bold", hjust = 0.5)) + 
+  labs(title = "Correlation Matrix Heatmap")
+```
+
+\small The correlation matrix reveals insights regarding the relationships between six ecological variables Ladybirds, Vascular Plants, Carabids, Grasshoppers & Crickets, Birds, and Macromoths. There was a strong positive correlation between Macromoths and Birds (0.64), suggesting a notable association, and also a negligible correlation between Ladybirds and Vascular Plants (0.06). Carabids and Grasshoppers & Crickets (0.51) also had a moderate positive correlation. For most other pairwise correlations, there is some variety in weak or moderate correlation, reflecting the fact that our variables are associated to different extents. This analysis therefore hints at some dependencies among the variables that may need further exploration.
+
+\large \underline{\textbf{Boxplot:}}
+```{r fig.align='center', fig.show="hold", out.width="65%"}
+# Extract the "Vascular_plants" variable from BD6 dataset.
+BD_Vascular <- BD6$Vascular_plants
+
+# Boxplot
+par(mfrow = c(1,2))
+boxplot(BD_Vascular ~ BD6$period, 
+        col = "pink",
+        main = "Boxplot for Vascular plants over two periods", 
+        cex.main = 0.8)
+
+# Calculate the first and third quartiles (Q1 and Q3) of Vascular_plants variable.
+Q1 <- quantile(BD_Vascular, 0.25)
+Q3 <- quantile(BD_Vascular, 0.75)
+
+# Calculate the interquartile range (IQR) for Vascular_plants to find potential outliers.
+IQR <- Q3 - Q1
+
+# Find the upper and lower whisker limits based on 2 times the IQR.
+lower_limit <- Q1 - 2 * IQR
+upper_limit <- Q3 + 2 * IQR
+
+# Identify outliers: data points outside the whisker limits for vascular plants.
+outliers <- BD_Vascular[BD_Vascular < lower_limit | BD_Vascular > upper_limit]
+
+# Display the values that are identified as outliers in the Vascular_plants data.
+#print("Outliers:")
+#print(outliers)
+
+# Creating a boxplot for Vascular plants to visualize distribution and outliers.
+boxplot(BD_Vascular, 
+        main = "Boxplot for Vascular plants (BD6)",
+        cex.main = 0.8,
+        ylab = "Vascular Plants",
+        col = "lightblue",
+        outline = TRUE) # Show outliers on the boxplot
+
+# Adding horizontal lines to indicate upper and lower whisker limits on the boxplot.
+abline(h = lower_limit, col = "red", lty = 2)
+abline(h = upper_limit, col = "red", lty = 2)
+```
+\small The boxplots illustrated a two-period comparison between vascular plants, say Y00 and Y70, would postulate the latter to have a higher median compared to the former, generally depicting an improvement or increase in the measured ecological status. However, Y70 also has more outliers, indicating higher variability and some extreme observations. Further, the BD6 box plot reinforces this trend by being consistent with regard to the median but having many outliers below 0.5, thus showing some very unusual values within the dataset. Identifying outliers, a range of 0.42 to 0.46 reveals deviations that could signal specific anomalies or unique ecological conditions. Taken altogether, these results suggest improvement in the vascular plants status with time but increasing variability, possibly worthy of deeper examination.
+
+## Hypothesis Tests:
+\large \underline{\textbf{Kolmogorov-Smirnov (KS) test:}}
+```{r fig.align='center', fig.show="hold", out.width="75%"}
+# =============================================================================== #
+#                Hypothesis test 1 - Kolmogorov-Smirnov (KS) test                 #
+# =============================================================================== #
+# Null hypothesis (H0) is the two samples(eco_status_11 and eco_status_6) comes from the same distribution.
+# Alternative hypothesis(Ha) is the two samples(eco_status_11 and eco_status_6) comes from the different distributions.
+
+# Extracts the 'ecologicalStatus' and 'eco_status_6' columns from BD6 for comparison
+eco_status_11 <- BD6%>%pull(ecologicalStatus)
+eco_status_6 <- BD6%>%pull(eco_status_6)
+eco_period <- BD6%>%pull(period)
+
+# Visual comparisons of distributions using boxplots.
+par(mfrow = c(2, 2))
+boxplot(eco_status_11, main = "Boxplot for ecologicalStatus (BD11)",
+        col = "darkorchid3")  # Boxplot for BD11.
+boxplot(eco_status_6, main = "Boxplot for eco_status_6 (BD6)",
+        col = "darkorange")         # Boxplot for BD6.
+
+# Using QQ plot to assess how the quantiles of the two samples align with each other.
+qqplot(eco_status_11, eco_status_6, 
+       main = "QQ Plot for ecologicalStatus vs eco_status_6")
+abline(0,1, col = 'orange')
+
+# Visualizing the CDFs of the two samples for comparison.
+BD6_eco_cdf <- ecdf(eco_status_6)
+BD11_eco_cdf <- ecdf(eco_status_11)
+plot(BD11_eco_cdf, col = 'green', main = 'Plot of BD11 and BD6 CDF',
+     xlab = "Value", ylab = "Fn(x)")
+lines(BD6_eco_cdf, col = 'red')
+
+# Performing the Kolmogorov-Smirnov (KS) test to assess if the two samples comes from the same distribution.
+Test_1_Result <- ks.test(eco_status_11, eco_status_6)
+#print(Test_1_Result)
+
+# Calculating the 92% confidence interval for the D statistic.
+D_statistic <- Test_1_Result$statistic
+n1 <- length(eco_status_11)
+n2 <- length(eco_status_6)
+alpha <- 0.08  # (1 - 0.92)
+
+# Computing the critical value.
+critical_value <- sqrt(-log(alpha / 2) * ((n1 + n2) / (n1 * n2)))
+
+# Computing the confidence interval for the D statistic.
+lower_limit <- max(0, D_statistic - critical_value)
+upper_limit <- min(1, D_statistic + critical_value)
+
+#cat("92% Confidence Interval for D statistic:", 
+ #   "(", lower_limit, ",", upper_limit, ")\n")
+
+# Interpretation:
+# Alternate hypothesis(Ha) Got solid evidence that the two samples comes from the different distributions.
+```
+
+\small The Kolmogorov-Smirnov test was carried out in order to compare the distributions of eco_status_11 and eco_status_6. It returned a test statistic =0.072432, which is the maximum difference between their cumulative distribution functions (CDFs). The very low p-value =0.0001218 indicates that the two distributions are significantly different; hence, the null hypothesis that they are identical can be rejected. The 92% confidence interval for the D statistic is also (0.01344205, 0.1314228). It corroborates the reliability of this difference. All these results indicate that the ecological status values for eco_status_11 and eco_status_6 are not identically distributed, which points to remarkable differences between the two datasets.
+
+\large \underline{\textbf{One sample T-Test:}}
+```{r fig.align='center', fig.show="hold", out.width="55%"}
+# =============================================================================== #
+#                    Hypothesis test 2 - T-Test Hypothesis                        #
+# =============================================================================== #
+# Null hypothesis (H0) is the mean of BD6_eco_diff is equal to mean of BD11_eco_diff.
+# Alternative hypothesis (H0) is the mean of BD6_eco_diff is not equal to mean of BD11_eco_diff.
+
+# Separates the data by period and prepares it for hypothesis testing.
+par(mfrow = c(1, 2))
+BD6_split <- BD6 %>% select(Location, period, eco_status_6) %>% 
+  pivot_wider(names_from = period, values_from = eco_status_6) %>% 
+  mutate(BD6_eco_diff = Y00 - Y70)
+BD11_split <- BD6 %>% select(Location, period, ecologicalStatus) %>% 
+  pivot_wider(names_from = period, values_from = ecologicalStatus) %>% 
+  mutate(BD11_eco_diff = Y00 - Y70)
+
+# Extract changes and calculate the mean for BD11_change for hypothesis testing.
+BD11_eco_diff <- BD11_split %>% pull(BD11_eco_diff)
+BD6_eco_diff <- BD6_split %>% pull(BD6_eco_diff)
+avg <- mean(BD11_eco_diff)
+
+# Creating boxplots to visualize the changes in BD11 and BD6
+boxplot(BD11_eco_diff, main = 'Boxplot for BD11_eco_diff',col = "#1f77b4",
+        border = "black")
+boxplot(BD6_eco_diff, main = 'Boxplot for BD6_eco_diff',col = "#ff7f0e",
+        border = "black")
+
+
+# Performing a one-sample t-test to test if the mean of BD6_eco_diff is different from the mean of BD11_eco_diff.
+Test_2_Result <- t.test(BD6_eco_diff, mu = avg , conf.level = 0.92)
+#print(Test_2_Result)
+
+# Interpretation:
+# We have strong evidence to reject the null hypothesis that the true mean of BD6_eco_diff is 0.
+# The 92% confidence interval confirms that the mean is likely between -0.0717 and -0.0616, indicating that the mean of BD6_eco_diff is negative.
+
+```
+
+\small The results of one-sample t-test on BD6_eco_diff clearly showed that the mean, which was taken as the hypothesis (-0.02278728), differed significantly, with a t-statistic of -15.213 and the very highly significant p-value (\<2.2e-16). The average sample (-0.0666) showed a 92% confidence interval (-0.07167 to -0.06157), further at the same time confirming the differentiation. The boxplots comparing BD11_eco_diff and BD6_eco_diff display symmetric distributions but highlight outlier patterns uniquely: upper-range outliers for BD11_eco_diff and lower-range outliers for BD6_eco_diff. These findings suggest that there may be meaningful ecological trends or differences, and with the outliers' presence, further investigations should seek to understand their causation and implications.
+
+\Large \underline{\textbf{Contingency table/comparing categorical variables:}}
+```{r fig.align='center', fig.show="hold", out.width="25%"}
+# ============================= Contingency Table ============================================= #
+
+# Creating a contingency table to compare the direction of ecological changes between BD11 and BD6.
+
+# Extracting relevant columns for changes in BD6 and BD11.
+eco_diff_BD6 <- BD6_split %>% select(Location, BD6_eco_diff)
+eco_diff_BD11 <-BD11_split %>% select(Location, BD11_eco_diff)
+
+# Merging both (eco_diff_BD6 and eco_diff_BD11) datasets by location.
+both_eco_diff <- inner_join(eco_diff_BD6, eco_diff_BD11, by = 'Location')
+
+# Categorizing the 'eco_diff' as 'UP' or 'DOWN' for both BD6 and BD11.
+both_eco_diff <- both_eco_diff %>% 
+  mutate(BD11up=ifelse(both_eco_diff$BD11_eco_diff>0,'UP', 'DOWN'))%>%
+  mutate(BD6up=ifelse(both_eco_diff$BD6_eco_diff>0,'UP', 'DOWN'))
+
+# Extracting the 'UP' or 'DOWN' values for both BD6 and BD11 eco_diff.
+BD6UP <- both_eco_diff %>% pull(BD6up)
+BD11UP <- both_eco_diff %>% pull(BD11up)
+
+# Creating a contingency table to compare BD11up and BD6up.
+table_up_down <- table(BD11UP, BD6UP)
+#print(table_up_down)
+
+# Add margins (row and column totals) to the table_up_down.
+g_total <- addmargins(table_up_down)
+#print(g_total)
+
+knitr::kable(
+  g_total, 
+  format = "latex", 
+  booktabs = TRUE, 
+  caption = "Contingency Table",
+  font_size = 7
+) %>%
+  kableExtra::kable_styling(
+    latex_options = c("hold_position", "striped"),
+    font_size = 7,
+    position = "center"
+  )
+
+```
+
+\small This contingency table compares "UP" and "DOWN" transitions between two variables (BD11UP and BD6UP). It provides counts for each combination, row and column totals, and a grand total of 925.
+
+```{r fig.align='center', fig.show="hold", out.width="25%"}
+# ============================== Independent model ============================================ #
+
+# Contingency table for independent model.
+
+# Calculating expected counts based on the assumption of independence.
+independent_table <- round(outer(rowSums(table_up_down),colSums(table_up_down))/sum(table_up_down))
+
+# Displays summary of the contingency table, which includes chi-squared test results(similar p value).
+#summary(table_up_down)
+
+# Convert the independent table into a table.
+independent_table <- as.table(independent_table)
+#print(independent_table)
+
+# Add margins (row and column totals) to the independent table.
+g_total_independent <- addmargins(independent_table)
+#print(g_total_independent)
+
+knitr::kable(
+  g_total_independent, 
+  format = "latex", 
+  booktabs = TRUE, 
+  caption = "Independent Table",
+  font_size = 7
+) %>%
+  kableExtra::kable_styling(
+    latex_options = c("hold_position", "striped"),
+    font_size = 7,
+    position = "center"
+  )
+
+```
+
+\small The independent contingency table categorizes "UP" and "DOWN" states, the total cell count being 925. The outcome of the summation is that "DOWN" is shown in the rows' 506 and 132, whereas "UP" is found on fewer occasions (228 and 59). The table implies a potential disproportion in the number of the two states.
+
+\large \underline{\textbf{Likelihood-ratio:}}
+```{r}
+# ============================== Likelihood-ratio ============================================= #
+
+# Likelihood-ratio test at 93% Confidence Interval.
+
+# Performing the G-test (Likelihood-Ratio Test) on the contingency table.
+likelihood_ratio_test <- GTest(table_up_down)
+#print(likelihood_ratio_test)
+
+# Extracting the UP and Total counts from the contingency table for BD6.
+BD6_up_count <- sum(table_up_down["UP", ])
+BD6_total_count <- sum(table_up_down[, "UP"]) + sum(table_up_down[, "DOWN"])
+
+# Extracting the UP and Total counts from the contingency table for BD11.
+BD11_up_count <- sum(table_up_down[, "UP"])
+BD11_total_count <- sum(table_up_down["UP", ]) + sum(table_up_down["DOWN", ])
+
+# Calculating proportions of "UP" for BD6 and BD11.
+Prop_BD6_up <- BD6_up_count / BD6_total_count
+Prop_BD11_up <- BD11_up_count / BD11_total_count
+
+# Performing a proportion test with a 93% confidence level.
+Prop_test <- prop.test(
+  x = c(BD6_up_count, BD11_up_count),
+  n = c(BD6_total_count, BD11_total_count),
+  conf.level = 0.93
+)
+
+# Displays the proportions of UP events in BD6 and BD11.
+#cat("Proportion of UP in BD6:", Prop_BD6_up, "\n")
+#cat("Proportion of UP in BD11:", Prop_BD11_up, "\n")
+
+# Displays the results of the proportion test with a 93% confidence interval.
+#print(Prop_test)
+
+```
+
+\small The analysis includes results from a log-likelihood ratio (G-test) for independence and a two-sample test for equality of proportions. The G-test shows a highly significant result (p \< 2.2 × 10\^−16), which strongly rejects the null hypothesis of independence between the variables in the contingency table. The calculated proportions of "UP" states are 0.3102703 for BD6 and 0.2064865 for BD11, indicating a notable difference. A two-sample test for equality of proportions, with continuity correction applied, further confirms this difference with a significant p-value of 4.519 × 10\^−7. This supports the alternative hypothesis that the proportions are not equal. The confidence interval for the difference in proportions ranges from 0.06608197 to 0.14148560, reinforcing the observed disparity. The estimated proportions for the two groups (prop 1 = 0.3102703, prop 2 = 0.2064865) show a higher proportion of "UP" states in BD6 compared to BD11. These results suggest a systematic difference in the behavior of the two groups, which is statistically significant and unlikely to be due to random chance. The analysis strongly supports the presence of an association between the variables.
+
+
+\large \underline{\textbf{Odds-ratio:}}
+```{r}
+# ==================================== Odds-ratio =========================================== #
+
+# Odds-ratio
+Odds_Ratio <- OddsRatio(table_up_down)
+#print(Odds_Ratio)
+
+# Alternative method for Odds-ratio
+BD11_up_prob <- table_up_down[1, 1]/table_up_down[1, 2]
+BD6_up_prob <- table_up_down[2, 1]/table_up_down[2, 2]
+Odds_ratio <- BD11_up_prob/BD6_up_prob
+#print(Odds_ratio)
+```
+
+\small The odds ratio was calculated using two different methods, both resulting in a value of 56.24883. This odds ratio suggests a strong link between the two variables examined, indicating that the odds of the "UP" state in BD11 are roughly 56 times greater than in BD6 when taking into account the respective probabilities. The agreement between the two methods reinforces the reliability of the calculation. This significant odds ratio underscores a marked difference in the distribution of "UP" and "DOWN" states between the two categories.
+
+
+\large \underline{\textbf{Sensitivity, Specificity and Youden’s Index:}}
+```{r}
+# ========================= Sensitivity, Specificity & Youden’s Index ========================= #
+
+# Sensitivity
+Sensitivity <- table_up_down[2,2]/colSums(table_up_down)[2]
+#print(Sensitivity)
+
+# Specificity
+Specificity <- table_up_down[1,1]/colSums(table_up_down)[1]
+#print(Specificity)
+
+# Youden's index
+Youden <- Sensitivity + Specificity - 1
+#print(Youden)
+```
+
+\small The performance of the classification system was evaluated using sensitivity, specificity, and Youden's index. Sensitivity, which indicates the true positive rate, was found to be 0.9109948, reflecting a strong ability to accurately identify positive cases ("UP"). Specificity, representing the true negative rate, was calculated at 0.846049, demonstrating a robust capability to correctly identify negative cases ("DOWN"). Youden's index, which combines sensitivity and specificity to assess the overall effectiveness of the classification, was computed to be 0.7570438. This value indicates that the system performs well, maintaining a good balance between sensitivity and specificity.
+
+
+\Large \underline{\textbf{Simple Linear Regression:}}
+```{r fig.align='center', fig.show="hold", out.width="65%"}
+# =============================================================================== #
+#                          Simple linear regression                               #
+# =============================================================================== #
+
+# Filter BD11 dataset to include only rows where the 'dominantLandClass' contains 's' to select data for Scotland.
+BD1 <- BD11 %>% filter(grepl('s', dominantLandClass))
+
+# Performing linear regression with 'Bees' as the dependent variable and 'eco_status_6' as the independent variable.
+lin_mod <- lm(BD1$Bees ~ BD6$eco_status_6, y = T)
+#summary(lin_mod)
+# Calculating the correlation between the fitted values and the observed values (Bees).
+#cor(lin_mod$fitted.values, lin_mod$y)
+
+# Creating a new data frame for plotting and combining the 'eco_status_6' variable from BD6 and 'Bees' from BD1.
+eco_bees_data <- data.frame(eco_status_6 = BD6$eco_status_6, Bees = BD1$Bees)
+
+```
+
+\small The linear regression analysis reveals a significant positive relationship between BD6_eco_status_6 and BD1_Bees, with a coefficient of 1.15252 (p-value < 2.2e-16), indicating that improvements in  BD6_eco_status_6  are associated with an increase in  BD1_Bees. The model is statistically significant overall, as evidenced by an F-statistic of 617.3 and a p-value < 2.2e-16. However, the  R-squared  value of 0.25 suggests that while  BD6_eco_status_6 explains 25% of the variability in  BD1_Bees, other factors may also influence BD1_Bees and warrant further investigation. The residuals are reasonably distributed, supporting the reliability of the model, though the moderate R-squared highlights the potential need for additional predictors to improve explanatory power.
+
+```{r fig.align='center', fig.show="hold", out.width="55%"}
+
+# Creating a scatter plot of 'eco_status_6' vs 'Bees' with a regression line.
+ggplot(eco_bees_data, aes(x = eco_status_6, y = Bees)) +
+  geom_smooth(method = "lm", se = FALSE, color = "green") + # Regression line
+  geom_abline(color = 'red') +                             # Reference line
+  geom_point() +                                           # Points
+  theme_minimal() +                                        # Minimal theme for cleaner design
+  theme(
+    panel.border = element_rect(color = "black", fill = NA, size = 1)
+  )
+```
+
+\small The scatterplot illustrates the relationship between eco_status_6 (x-axis) and Bees (y-axis), where each point represents an observation. The red line depicts the fitted regression line, showing a positive correlation as Bees values tend to increase with higher eco_status_6. The green line may represent an alternative trend or a smoothed fit, highlighting variations in the data. While the overall trend supports the positive relationship observed in the regression analysis, the scatterplot reveals significant variability around the regression line, with some outliers deviating considerably. This suggests that while eco_status_6 is a strong predictor, other factors might also influence Bees, warranting further exploration or the inclusion of additional variables in the model.
+
+```{r fig.align='center', fig.show="hold", out.width="75%"}
+# Creating a scatter plot of 'eco_status_6' vs 'Bees' with a regression line.
+par(mfrow = c(1, 3))
+plot(BD1$Bees ~ BD6$eco_status_6, xlab="Eco Status 6", ylab="Bees",main = 'Plot for Eco status 6 VS Bees')
+abline(0,1, col = 'red')
+abline(lin_mod, col = 'green')
+
+# Creating a Residuals vs Fitted values plot to check for patterns in residuals
+plot(jitter(lin_mod$fitted.values),lin_mod$residuals, xlab="Fitted", ylab="Residuals", main= 'Plot for Residuals')
+abline(h=0,col="red")
+
+# Creating a Q-Q plot to check if residuals follow a normal distribution.
+qqnorm(lin_mod$residuals)
+qqline(lin_mod$residuals, col="red")
+
+```
+
+\small Diagnostic and scatter plots have been used to analyze the relationship between Eco Status 6 and Bees. The smooth regression line on the scatter plot is positive, indicating that with a rise in the values of Eco Status 6, Bee population also increases. The residual plot appears rather randomly scattered around zero, so there is no serious complaint of heteroscedasticity, though minor pattern issues do occur that necessitate inspection. The Q-Q plot shows that the residuals are not objectionable in most aspects of normality, except at the tail ends. Overall, the model effectively captures the relationship between Eco Status 6 and Bees, but slight residual deviations suggest room for model refinement to enhance predictive accuracy.
+
+\Large \underline{\textbf{Multiple Linear Regression:}} 
+```{r}
+# =============================================================================== #
+#                          Multiple linear regression                             #
+# =============================================================================== #
+
+# Performing multiple linear regression.
+# Dependent Variable: BD1$Bees.
+# Independent Variables: Selected columns from BD6 as defined by BD6_taxonomic_names.
+multi_lin_mod <- lm(BD1$Bees~., data = BD6[c(BD6_taxonomic_names)], y = T)
+
+# Displays a summary of the regression model.
+#summary(multi_lin_mod)
+
+# Calculating the Akaike Information Criterion (AIC) for the model.
+#AIC(multi_lin_mod)
+
+# Calculating the correlation between the model's fitted values and the actual observed values.
+#cor(multi_lin_mod$fitted.values, multi_lin_mod$y) 
+#par(mfrow = c(2, 2))
+#plot(multi_lin_mod)
+```
+
+\small The regression analysis indicates that the three significant predictors of the number of Bees are Ladybirds, Grasshoppers/Crickets, and Macromoths. Macromoths have the highest positive effect. The variables Vascular Plants, Carabids, and Birds are not significant and therefore contribute less to the model. These can be considered for exclusion in order to make the model simpler without major loss in explanatory power. The model explains 32.1% of the variance in Bees (R-squared = 0.3211), with an adjusted R-squared of 0.3189, indicating a good balance of explanatory power and model complexity. The residual standard error of 0.2449 and a correlation of 0.5666951 between observed and predicted values suggest moderate model performance. With an AIC of 53.43463, the model effectively balances fit and complexity, providing meaningful insights into factors affecting the Bee population.
+
+\large \underline{\textbf{Reduced Multiple Linear Regression:}}
+```{r}
+# ========================= Reduced Multiple Linear Regression ============================= #
+
+# Performing reduced multiple linear regression.
+# Dependent Variable: BD1$Bees.
+# Independent Variables: selected predictors from BD6.
+multi_lin_mod_reduced <- lm(BD1$Bees~., data =
+                    BD6[c("Ladybirds", "Vascular_plants", "Carabids","Bird", "Macromoths")], y = T)
+
+# Displays a summary of the reduced model.
+#summary(multi_lin_mod_reduced)
+
+# Comparing the Akaike Information Criterion (AIC) between the full model and the reduced model.
+# A lower AIC suggests a better-fitting model.
+#AIC(multi_lin_mod, multi_lin_mod_reduced)
+
+# Calculating the correlation between the fitted values and the actual observed values.
+# This shows how well the reduced model predicts the outcome.
+#cor(multi_lin_mod_reduced$fitted.values, multi_lin_mod_reduced$y)
+
+```
+
+\small The reduced multiple linear regression model identified Ladybirds, Carabids, and Macromoths as significant predictors of the number of Bees, with Macromoths having the strongest positive effect. Non-significant variables, such as Vascular Plants and Birds, contribute minimally to the model and could be excluded for simplicity. The model explained 31.3% of the variance (R-squared = 0.313) and showed a moderate positive correlation between predicted and observed values (correlation = 0.559). The AIC of the reduced model is 73.40625, making it more balanced between simplicity and performance and thereby more interpretable and efficient compared to the full model.
+
+\large \underline{\textbf{Multiple Linear Regression Analysis with Interaction Terms:}}
+```{r fig.align='center', fig.show="hold", out.width="90%"}
+# ================ Multiple Linear Regression Analysis with Interaction Terms ================ #
+
+# Performing a multiple linear regression model with interaction between 'Carabids' and 'Macromoths' to predict BD1$Bees.
+# Dependent Variable: BD1$Bees
+# Independent Variables: Ladybirds, Vascular_plants, Carabids, Bird, Macromoths, and interaction between Carabids and Macromoths.
+multi_lin_mod_interaction <- lm(BD1$Bees ~ Ladybirds+Vascular_plants+Carabids+Bird+Macromoths
+                  +Carabids*Macromoths, data=BD6,y = T)
+
+# Display summary of the model to evaluate coefficients, p-values, and R-squared values
+#summary(multi_lin_mod_interaction)
+
+# Comparing Akaike Information Criterion (AIC) for the models to assess fit.
+AIC_summary <- AIC(multi_lin_mod,multi_lin_mod_reduced,multi_lin_mod_interaction)
+
+AIC_summary %>%
+  kable("latex", caption = "AIC Values for Different Models", 
+        col.names = c("df", "AIC")) %>%
+  kable_styling(latex_options = c("hold_position", "responsive", "striped"), 
+                full_width = FALSE, 
+                position = "center") %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#3b5998") %>%  # Blue header with white text
+  row_spec(1:6, color = "black", background = "#f1f1f1")
+
+# Calculating correlation between fitted values and actual observed values.
+#cor(multi_lin_mod_interaction$fitted.values, multi_lin_mod_interaction$y)
+
+# Plotting for diagnostics
+par(mfrow = c(1, 3))
+plot(BD1$Bees ~ multi_lin_mod_interaction$fitted.values, xlab="Fitted", ylab="Bees", main = 'Plot for fitted values')
+abline(0,1, col = 'red')
+
+# Residual vs Fitted plot for model diagnostics.
+plot(jitter(multi_lin_mod$fitted.values), multi_lin_mod$residuals, xlab="Fitted", ylab="Residuals", main = 'Plot for Residuals')
+abline(h=0,col="green")
+
+# Q-Q plot to check for normality of residuals.
+qqnorm(multi_lin_mod$residuals)
+qqline(multi_lin_mod$residuals, col="red")
+```
+##
+\small The relationship between the dependent variable Bees and the predictors Ladybirds, Vascular Plants, Carabids, Birds, Macromoths, and their interaction term Carabids × Macromoths is tested through multiple linear regression analysis. Significant predictors are Macromoths and the interaction term, which signifies the effect of the predictors on the response variable. The model explains 31.51% of the variance in Bees (R-squared = 0.3151), and the interaction model has the lowest AIC (69.89), which indicates it is the most efficient model. Diagnostic plots highlight some issues, such as residual deviations from normality and potential heteroscedasticity; hence, further refinement seems warranted. All in all, the interaction model brings forth some meaningful insights, but addressing the model assumptions may improve its robustness and predictive power.
+
+
+\large \underline{\textbf{Two-Fold Cross-Validation:}}
+
+```{r fig.align='center', fig.show="hold", out.width="70%"}
+# =========================== Two-Fold Cross-Validation ======================================= #
+
+# Splitting the data into training and testing data for two folds.
+# Filters data based on the period column to create training and testing datasets.
+Y70_train_data <- BD11 %>% filter(period == "Y70")
+Y00_test_data <- BD11 %>% filter(period == "Y00")
+
+Y00_train_data <- BD11 %>% filter(period == "Y00")
+Y70_test_data <- BD11 %>% filter(period == "Y70")
+
+# Fold 1: Train on Y70, Test on Y00.
+# Build a linear regression model using training data from Y70 and predict on Y00.
+model_Y70 <- lm(Bees ~ ., data = Y70_train_data[, c("Bees", BD6_taxonomic_names)])
+predictions_Y00 <- predict(model_Y70, newdata = Y00_test_data[, BD6_taxonomic_names])
+
+# Calculating the Mean Squared Error (MSE) for training and testing for fold 1.
+fold1_train_MSE <- mean((Y70_train_data$Bees - model_Y70$fitted.values)^2)
+fold1_test_MSE <- mean((Y00_test_data$Bees - predictions_Y00)^2)
+
+# Fold 2: Train on Y00, Test on Y70.
+# Build a linear regression model using training data from Y00 and predict on Y70.
+model_Y00 <- lm(Bees ~ ., data = Y00_train_data[, c("Bees", BD6_taxonomic_names)])
+predictions_Y70 <- predict(model_Y00, newdata = Y70_test_data[, BD6_taxonomic_names])
+
+# Calculating the Mean Squared Error (MSE) for training and testing for fold 2.
+fold2_train_MSE <- mean((Y00_train_data$Bees - model_Y00$fitted.values)^2)
+fold2_test_MSE <- mean((Y70_test_data$Bees - predictions_Y70)^2)
+
+# Calculating averages.
+# Computing average training and testing MSE across both folds.
+avg_train_MSE <- mean(c(fold1_train_MSE, fold2_train_MSE))
+avg_test_MSE <- mean(c(fold1_test_MSE, fold2_test_MSE))
+
+
+results <- list(
+  Fold1_Train_MSE = fold1_train_MSE,
+  Fold1_Test_MSE = fold1_test_MSE,
+  Fold2_Train_MSE = fold2_train_MSE,
+  Fold2_Test_MSE = fold2_test_MSE,
+  Avg_Train_MSE = avg_train_MSE,
+  Avg_Test_MSE = avg_test_MSE
+)
+
+#print(results)
+
+# Converting the results to a data frame
+results_df <- data.frame(
+  Metric = c("Fold 1 Train MSE", "Fold 1 Test MSE", "Fold 2 Train MSE", "Fold 2 Test MSE", 
+             "Average Train MSE", "Average Test MSE"),
+  MSE_Value = c(fold1_train_MSE, fold1_test_MSE, fold2_train_MSE, fold2_test_MSE, avg_train_MSE, avg_test_MSE)
+)
+
+
+results_df %>%
+  kable("latex", caption = "MSE Values for Each Fold and Average", 
+        col.names = c("Metric", "MSE Value")) %>%
+  kable_styling(latex_options = c("hold_position", "responsive", "striped"), 
+                full_width = FALSE, 
+                position = "center") %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#3b5998") %>%  # Blue header with white text
+  row_spec(1:6, color = "black", background = "#f1f1f1")  # Alternating row colors
+
+# Preparing data for Visualization.
+# Creating a list of fold names and corresponding MSE values for training and testing.
+folds <- c("Fold 1", "Fold 2", "Average")
+train_MSE <- c(fold1_train_MSE, fold2_train_MSE, avg_train_MSE)
+test_MSE <- c(fold1_test_MSE, fold2_test_MSE, avg_test_MSE)
+
+# Combining into a data frame for plotting.
+# Create a structured data frame with fold names, MSE values, and their type (train/test).
+mse_data <- data.frame(
+  Fold = rep(folds, 2),
+  MSE = c(train_MSE, test_MSE),
+  Type = rep(c("Train MSE", "Test MSE"), each = length(folds))
+)
+
+# Plotting train and test MSE.
+ggplot(mse_data, aes(x = Fold, y = MSE, fill = Type)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  labs(
+    title = "MSE for Two-Fold Cross Validation",
+    x = "Folds",
+    y = "Mean Squared Error",
+    fill = "MSE Type"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1),
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  scale_fill_manual(values = c("Train MSE" = "purple", "Test MSE" = "gold"))
+
+
+# ======================================== The End =========================================== #
+```
+
+\small The provided results and visualization highlight the performance of a model evaluated using two-fold cross-validation with Mean Squared Error being the performance metric. From the bar plot, the Train MSE and Test MSE for each fold are compared alongside their respective averages. The numerical values indicate that the Train MSE is consistently lower (0.04375149 and 0.06205749 for Fold 1 and Fold 2, respectively) compared to the Test MSE (0.1292456 and 0.1233161). This disparity suggests potential overfitting, where the model performs well on training data but struggles to generalize to unseen test data. The average Train MSE (0.05290449) and Test MSE (0.1262809) further confirm this trend. Although the Test MSE was relatively stable across folds with the present hyperparameters, the large gap between Train and Test MSEs evidently indicates room for improvement. In that, the use of regularization techniques, model simplification, or increasing sample size with more diversity might be considered to enhance generalization.
